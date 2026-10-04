@@ -2,6 +2,11 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 
+import '../models/user.dart';
+import '../services/api_client.dart';
+import '../services/auth_service.dart';
+import 'dashboard_screen.dart';
+
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -9,12 +14,18 @@ class LoginScreen extends StatefulWidget {
   State<LoginScreen> createState() => _LoginScreenState();
 }
 
+// TEMP: backend not ready yet — skip the API call and go straight to the
+// dashboard with a placeholder user. Flip back to false once the login API
+// should be used again.
+const bool _bypassBackendLogin = true;
+
 class _LoginScreenState extends State<LoginScreen> {
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
 
   bool _obscurePassword = true;
   bool _rememberMe = true;
+  bool _isLoading = false;
 
   static const _accentStart = Color(0xFF17C7F2);
   static const _accentEnd = Color(0xFF0066FF);
@@ -35,17 +46,47 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  void _handleLogin() {
+  Future<void> _handleLogin() async {
     final username = _usernameController.text.trim();
     final password = _passwordController.text;
     if (username.isEmpty || password.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Username dan password wajib diisi')),
-      );
+      _showErrorDialog('Username dan password wajib diisi.');
       return;
     }
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text('Masuk sebagai $username...')));
+
+    setState(() => _isLoading = true);
+    try {
+      final user = _bypassBackendLogin
+          ? AppUser(
+              id: 1,
+              name: username,
+              role: 'Kasir',
+              outlet: 'Outlet Utama',
+            )
+          : await AuthService.instance.login(username, password);
+      if (!mounted) return;
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => DashboardScreen(user: user)),
+      );
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      _showErrorDialog(e.message);
+    } catch (_) {
+      if (!mounted) return;
+      _showErrorDialog(
+        'Tidak dapat terhubung ke server. Silakan periksa jaringan Anda.',
+      );
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  void _showErrorDialog(String message) {
+    showDialog<void>(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.5),
+      builder: (_) => _LoginErrorDialog(message: message),
+    );
   }
 
   void _handleQrLogin() {
@@ -78,6 +119,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       passwordController: _passwordController,
                       obscurePassword: _obscurePassword,
                       rememberMe: _rememberMe,
+                      isLoading: _isLoading,
                       accentStart: _accentStart,
                       accentEnd: _accentEnd,
                       onToggleObscure: () =>
@@ -199,6 +241,7 @@ class _GlassLoginCard extends StatelessWidget {
   final TextEditingController passwordController;
   final bool obscurePassword;
   final bool rememberMe;
+  final bool isLoading;
   final Color accentStart;
   final Color accentEnd;
   final VoidCallback onToggleObscure;
@@ -211,6 +254,7 @@ class _GlassLoginCard extends StatelessWidget {
     required this.passwordController,
     required this.obscurePassword,
     required this.rememberMe,
+    required this.isLoading,
     required this.accentStart,
     required this.accentEnd,
     required this.onToggleObscure,
@@ -361,23 +405,35 @@ class _GlassLoginCard extends StatelessWidget {
                       color: Colors.transparent,
                       child: InkWell(
                         borderRadius: BorderRadius.circular(14),
-                        onTap: onLogin,
-                        child: const Center(
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.arrow_forward, color: Colors.white),
-                              SizedBox(width: 10),
-                              Text(
-                                'Masuk',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
+                        onTap: isLoading ? null : onLogin,
+                        child: Center(
+                          child: isLoading
+                              ? const SizedBox(
+                                  height: 22,
+                                  width: 22,
+                                  child: CircularProgressIndicator(
+                                    color: Colors.white,
+                                    strokeWidth: 2.5,
+                                  ),
+                                )
+                              : const Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      Icons.arrow_forward,
+                                      color: Colors.white,
+                                    ),
+                                    SizedBox(width: 10),
+                                    Text(
+                                      'Masuk',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                              ),
-                            ],
-                          ),
                         ),
                       ),
                     ),
@@ -494,6 +550,142 @@ class _GlassTextField extends StatelessWidget {
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
           borderSide: const BorderSide(color: Color(0xFF17C7F2), width: 1.5),
+        ),
+      ),
+    );
+  }
+}
+
+class _LoginErrorDialog extends StatelessWidget {
+  final String message;
+  const _LoginErrorDialog({required this.message});
+
+  static const _errorStart = Color(0xFFFF6B6B);
+  static const _errorEnd = Color(0xFFE53935);
+  static const _accentStart = Color(0xFF17C7F2);
+  static const _accentEnd = Color(0xFF0066FF);
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 32),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(28),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 340),
+            padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(28),
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Colors.white.withValues(alpha: 0.22),
+                  Colors.white.withValues(alpha: 0.08),
+                ],
+              ),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.35),
+                  blurRadius: 30,
+                  offset: const Offset(0, 12),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Align(
+                  alignment: Alignment.topRight,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(20),
+                    onTap: () => Navigator.of(context).pop(),
+                    child: const Padding(
+                      padding: EdgeInsets.all(4),
+                      child: Icon(Icons.close, color: Colors.white70, size: 20),
+                    ),
+                  ),
+                ),
+                Container(
+                  width: 64,
+                  height: 64,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: const LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [_errorStart, _errorEnd],
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: _errorEnd.withValues(alpha: 0.5),
+                        blurRadius: 20,
+                        spreadRadius: 2,
+                      ),
+                    ],
+                  ),
+                  child: const Icon(
+                    Icons.close_rounded,
+                    color: Colors.white,
+                    size: 32,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Login Gagal',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '$message\nSilakan periksa kembali dan coba lagi.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.8),
+                    fontSize: 13.5,
+                    height: 1.4,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(14),
+                      gradient: const LinearGradient(
+                        colors: [_accentStart, _accentEnd],
+                      ),
+                    ),
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(14),
+                        onTap: () => Navigator.of(context).pop(),
+                        child: const Center(
+                          child: Text(
+                            'Oke',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
