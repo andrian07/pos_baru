@@ -190,22 +190,9 @@ class _HistoryTopBar extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final isWide = constraints.maxWidth >= 700;
-        final title = Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              'Riwayat Transaksi',
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              'Lihat dan kelola semua transaksi penjualan, pulsa, PLN, PDAM dan voucher game',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 12.5, color: Colors.black54),
-            ),
-          ],
+        final title = const Text(
+          'Riwayat Transaksi',
+          style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
         );
 
         final searchBar = Container(

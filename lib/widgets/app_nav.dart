@@ -5,7 +5,9 @@ import '../screens/customer_screen.dart';
 import '../screens/dashboard_screen.dart';
 import '../screens/history_screen.dart';
 import '../screens/product_screen.dart';
+import '../screens/report_screen.dart';
 import '../screens/sales_screen.dart';
+import '../screens/settings_screen.dart';
 import 'app_sidebar.dart';
 
 void handleAppNavSelect(BuildContext context, int index, AppUser user) {
@@ -15,6 +17,8 @@ void handleAppNavSelect(BuildContext context, int index, AppUser user) {
     2 => ProductScreen(user: user),
     3 => CustomerScreen(user: user),
     4 => HistoryScreen(user: user),
+    5 => ReportScreen(user: user),
+    6 => SettingsScreen(user: user),
     _ => null,
   };
 
